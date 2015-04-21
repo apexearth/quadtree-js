@@ -129,9 +129,7 @@ function updateFar() {
 }
 
 
-/**
- * Finds the lowest sector at the specified coordinate.
- */
+
 function increaseSectorCount() {
     var sector = this;
     while (sector.parent != null) {
@@ -150,6 +148,10 @@ function getObjectSector(obj) {
     var coordinate = this.root.translate(obj);
     return getLowestSectorAtCoordinates.call(this, coordinate.x, coordinate.y, 0, false);
 }
+
+/**
+ * Finds the lowest sector at the specified coordinate.
+ */
 function getLowestSectorAtCoordinates(x, y, dimension, createIfNotFound) {
     var sector = this;
     var left;
