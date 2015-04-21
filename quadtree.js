@@ -67,13 +67,13 @@ function configureAsChild() {
     if (this.parent.children.indexOf(this) == -1) {
         this.parent.children.push(this);
         // TODO: I once thought this was necessary. I don't currently understand why.
-        orderArray.call(this.parent.children);
+        orderArrayOfSectors.call(this.parent.children);
     }
 
     if (this.root.allChildSectors.indexOf(this) === -1) {
         this.root.allChildSectors.push(this);
         // TODO: I once thought this was necessary. I don't currently understand why.
-        orderArray.call(this.root.allChildSectors);
+        orderArrayOfSectors.call(this.root.allChildSectors);
     }
 
     this.isChildSector = true;
@@ -106,7 +106,7 @@ function updateNearby() {
             var temp = getLowestSectorAtCoordinates.call(this.root, ix * this.dimension, iy * this.dimension, this.dimension, false);
             if (temp != null && this.nearbySectors.indexOf(temp) == -1) {
                 this.nearbySectors.push(temp);
-                var allObj = getAllObjects.call(temp);
+                var allObj = getObjectsInSector.call(temp);
                 var k = allObj.length;
                 while (k--) this.nearbyObjects.push(allObj[k]);
             }
@@ -121,7 +121,7 @@ function updateFar() {
         if (this.nearbySectors.indexOf(temp) == -1) {
             var j = this.nearbySectors.length, check = true;
             while (j--) {
-                if (getAllChildren.call(this.nearbySectors[j]).indexOf(temp) >= 0) check = false;
+                if (getAllChildSectors.call(this.nearbySectors[j]).indexOf(temp) >= 0) check = false;
             }
             if (check) this.far.push(temp);
         }
@@ -129,7 +129,7 @@ function updateFar() {
 }
 
 
-
+// ++ Sector Methods
 function increaseSectorCount() {
     var sector = this;
     while (sector.parent != null) {
@@ -144,14 +144,51 @@ function decreaseSectorCount() {
         sector = sector.parent;
     }
 }
+function orderArrayOfSectors() {
+    var i = this.length;
+    while (i-- > 1) {
+        var c1 = this[i];
+        var c2 = this[i - 1];
+        if (c1.left < c2.left || c1.left == c2.left && c1.top < c2.top) {
+            this.push(this.splice(i - 1, 1)[0]);
+        }
+    }
+}
+function isSectorFull() {
+    return this.objectCount >= this.root.sectorObjectLimit;
+}
+function getObjectsInSector() {
+    if (this.objects)
+        return this.objects;
+    else {
+        var i = this.children.length, array = [];
+        while (i--) {
+            var objects = getObjectsInSector.call(this.children[i]);
+            var j = objects.length - 1, k = -1;
+            while (k++ < j) array.push(objects[k]);
+        }
+        return array;
+    }
+}
+function getObjectCountAtSameCoordinate(coordinate) {
+    var countAtSameCoordinate = 0;
+    var childrenIndex = this.objects.length;
+    while (childrenIndex--) {
+        var treeObject = this.objects[childrenIndex];
+        if (Math.abs(treeObject.x - coordinate.x) < this.root.duplicateCoordinateSensitivity &&
+            Math.abs(treeObject.y - coordinate.y) < this.root.duplicateCoordinateSensitivity)
+            countAtSameCoordinate++;
+    }
+    return countAtSameCoordinate;
+}
+// -- Sector Methods
+
+
+// ++ Get Sector Methods
 function getObjectSector(obj) {
     var coordinate = this.root.translate(obj);
     return getLowestSectorAtCoordinates.call(this, coordinate.x, coordinate.y, 0, false);
 }
-
-/**
- * Finds the lowest sector at the specified coordinate.
- */
 function getLowestSectorAtCoordinates(x, y, dimension, createIfNotFound) {
     var sector = this;
     var left;
@@ -180,59 +217,23 @@ function getLowestSectorAtCoordinates(x, y, dimension, createIfNotFound) {
     }
     return sector;
 }
-
-/**
- * This recursive method will return all child sectors underneath the current sector.
- * @returns {Array}
- */
-function getAllChildren() {
+function getAllChildSectors() {
     if (this.children == null) return [];
     var i = this.children.length;
     var array = [];
     while (i--) {
         var child = this.children[i];
         array.push(child);
-        var childChildren = getAllChildren.call(child);
+        var childChildren = getAllChildSectors.call(child);
         var k = childChildren.length;
         while (k--) array.push(childChildren[k]);
     }
     return array;
 }
-/**
- * This recursive method will return all objects in or underneath the current sector.
- * @returns {Array}
- */
-function getAllObjects() {
-    if (this.objects)
-        return this.objects;
-    else {
-        var i = this.children.length, array = [];
-        while (i--) {
-            var objects = getAllObjects.call(this.children[i]);
-            var j = objects.length - 1, k = -1;
-            while (k++ < j) array.push(objects[k]);
-        }
-        return array;
-    }
-}
+// -- Get Sector Methods
 
 
-// Done Refactoring
-function orderArray() {
-    var i = this.length;
-    while (i-- > 1) {
-        var c1 = this[i];
-        var c2 = this[i - 1];
-        if (c1.left < c2.left || c1.left == c2.left && c1.top < c2.top) {
-            this.push(this.splice(i - 1, 1)[0]);
-        }
-    }
-}
-function isSectorFull() {
-    return this.objectCount >= this.root.sectorObjectLimit;
-}
-
-
+// ++ Add / Remove Objects from Sectors
 function add(obj) {
     var coordinate = this.root.translate(obj);
     var sector = getLowestSectorAtCoordinates.call(this, coordinate.x, coordinate.y, 0, true);
@@ -307,16 +308,6 @@ function removeObjectFromNearbySectors(obj) {
         }
     }
 }
+// -- Add / Remove Objects from Sectors
 
 
-function getObjectCountAtSameCoordinate(coordinate) {
-    var countAtSameCoordinate = 0;
-    var childrenIndex = this.objects.length;
-    while (childrenIndex--) {
-        var treeObject = this.objects[childrenIndex];
-        if (Math.abs(treeObject.x - coordinate.x) < this.root.duplicateCoordinateSensitivity &&
-            Math.abs(treeObject.y - coordinate.y) < this.root.duplicateCoordinateSensitivity)
-            countAtSameCoordinate++;
-    }
-    return countAtSameCoordinate;
-}
