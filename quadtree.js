@@ -15,16 +15,15 @@ function initialize(options) {
     if (this.isRoot) {
         this.root = this;
         this.allChildSectors = [];
-        this.translate = options.translate || function (obj) {return {x: obj.x, y: obj.y}};
         this.dimension = options.dimension || 1E5;
         this.sectorObjectLimit = options.sectorObjectLimit || 16;
         this.duplicateCoordinateSensitivity = options.duplicateCoordinateSensitivity || .00001;
-        configureAsParent.call(this);
+        configureAsParentSector.call(this);
     } else {
         this.root = options.parent.root;
         this.parent = options.parent;
         increaseSectorCount.call(this);
-        configureAsChild.call(this);
+        configureAsChildSector.call(this);
         this.dimension = options.parent.childDimension;
     }
 
@@ -35,18 +34,28 @@ function initialize(options) {
     this.sectorCount = 0;
 }
 
+
+
+function update() {
+
+}
+
+function check() {
+
+}
+
+// ++ Sector Methods
 /**
  * A parent sector contains other sectors. It does not directly contain objects.
  */
-function configureAsParent() {
+function configureAsParentSector() {
     this.tree = [];
     this.children = [];
     if (this.objects) {
         var i = this.objects.length;
         while (i--) {
             var obj = this.objects.pop();
-            var coordinates = this.root.translate(obj);
-            getLowestSectorAtCoordinates.call(this, coordinates.x, coordinates.y, 0, true).add(obj);
+            getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, true).add(obj);
         }
     }
 
@@ -55,15 +64,11 @@ function configureAsParent() {
 
     this.isChildSector = false;
     this.objects = null;
-    this.nearbyObjects = null;
-    this.nearbySectors = null;
-    this.far = null;
 }
-
 /**
  * A child sector does not contain other sectors. It directly contains objects.
  */
-function configureAsChild() {
+function configureAsChildSector() {
     if (this.parent.children.indexOf(this) == -1) {
         this.parent.children.push(this);
         // TODO: I once thought this was necessary. I don't currently understand why.
@@ -80,56 +85,11 @@ function configureAsChild() {
     this.tree = null;
     this.children = null;
     this.objects = [];
-    this.nearbyObjects = [];
-    this.nearbySectors = [];
-    this.far = [];
 }
-
-function convertToParent() {
-    configureAsParent.call(this);
+function convertToParentSector() {
+    configureAsParentSector.call(this);
     this.root.allChildSectors.splice(this.root.allChildSectors.indexOf(this), 1);
 }
-
-
-function update() {
-    updateNearby.call(this);
-    updateFar.call(this);
-}
-function updateNearby() {
-    this.nearbySectors = [];
-    this.nearbyObjects = [];
-    var x = this.left;
-    var y = this.top;
-
-    for (var ix = x - 1; ix <= x + 1; ix++) {
-        for (var iy = y - 1; iy <= y + 1; iy++) {
-            var temp = getLowestSectorAtCoordinates.call(this.root, ix * this.dimension, iy * this.dimension, this.dimension, false);
-            if (temp != null && this.nearbySectors.indexOf(temp) == -1) {
-                this.nearbySectors.push(temp);
-                var allObj = getObjectsInSector.call(temp);
-                var k = allObj.length;
-                while (k--) this.nearbyObjects.push(allObj[k]);
-            }
-        }
-    }
-}
-function updateFar() {
-    this.far = [];
-    var i = this.root.allChildSectors.length;
-    while (i--) {
-        var temp = this.root.allChildSectors[i];
-        if (this.nearbySectors.indexOf(temp) == -1) {
-            var j = this.nearbySectors.length, check = true;
-            while (j--) {
-                if (getAllChildSectors.call(this.nearbySectors[j]).indexOf(temp) >= 0) check = false;
-            }
-            if (check) this.far.push(temp);
-        }
-    }
-}
-
-
-// ++ Sector Methods
 function increaseSectorCount() {
     var sector = this;
     while (sector.parent != null) {
@@ -209,7 +169,7 @@ function getLowestSectorAtCoordinates(x, y, dimension, createIfNotFound) {
 
         var countAtSameCoordinate = getObjectCountAtSameCoordinate.call(sector, {x: x, y: y});
         if (countAtSameCoordinate < this.root.sectorObjectLimit && isSectorFull.call(sector) && sector.isChildSector) {
-            convertToParent.call(sector);
+            convertToParentSector.call(sector);
         }
 
 
@@ -235,32 +195,24 @@ function getAllChildSectors() {
 
 // ++ Add / Remove Objects from Sectors
 function add(obj) {
-    var coordinate = this.root.translate(obj);
-    var sector = getLowestSectorAtCoordinates.call(this, coordinate.x, coordinate.y, 0, true);
-    addObjectToSelf.call(sector);
-    addObjectToNearbyObjects.call(sector, obj);
-    addObjectToParents.call(sector);
-
+    var sector = getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, true);
+    addObjectToSector.call(sector, obj);
+    addObjectToSectorParents.call(sector, obj);
 }
 function remove(obj) {
     var sector = getObjectSector.call(this, obj);
-    removeObjectFromSelf.call(sector, obj);
-    removeObjectFromNearbySectors.call(sector, obj);
-    removeObjectFromParents.call(sector);
+    removeObjectFromSector.call(sector, obj);
+    removeObjectFromSectorParents.call(sector, obj);
 }
 
-function addObjectToSelf(obj) {
+function addObjectToSector(obj) {
     this.objectCount++;
     this.objects.push(obj);
-    this.nearbyObjects.push(obj);
 }
-function removeObjectFromSelf(obj) {
+function removeObjectFromSector(obj) {
     var objectIndex = this.objects.indexOf(obj);
     this.objectCount--;
     this.objects.splice(objectIndex, 1);
-
-    var nearbyObjectsIndex = this.nearbyObjects.indexOf(obj);
-    if (nearbyObjectsIndex !== -1) this.nearbyObjects.splice(nearbyObjectsIndex, 1);
 
     if (this.objectCount == 0) {
         var indexOf = this.root.allChildSectors.indexOf(this);
@@ -268,44 +220,22 @@ function removeObjectFromSelf(obj) {
     }
 }
 
-function addObjectToParents() {
+function addObjectToSectorParents() {
     var parent = this.parent;
     while (parent != null) {
         parent.objectCount++;
         parent = parent.parent;
     }
 }
-function removeObjectFromParents() {
+function removeObjectFromSectorParents() {
     var parent = this.parent;
     while (parent != null) {
         parent.objectCount--;
         if (parent.objectCount == 0 && parent.parent != null) {
             decreaseSectorCount.call(parent);
-            configureAsChild.call(parent);
+            configureAsChildSector.call(parent);
         }
         parent = parent.parent;
-    }
-}
-
-function addObjectToNearbyObjects(obj) {
-    var nearbySectorsIndex = this.nearbySectors.length;
-    var nearbySector;
-    while (nearbySectorsIndex--) {
-        nearbySector = this.nearbySectors[nearbySectorsIndex];
-        if (nearbySector.nearbyObjects != null)
-            nearbySector.nearbyObjects.push(obj);
-    }
-}
-function removeObjectFromNearbySectors(obj) {
-    var nearbySectorsIndex = this.nearbySectors.length;
-    var nearbySector;
-    var indexOf;
-    while (nearbySectorsIndex--) {
-        nearbySector = this.nearbySectors[nearbySectorsIndex];
-        if (nearbySector.nearbyObjects != null) {
-            indexOf = nearbySector.nearbyObjects.indexOf(obj);
-            if (indexOf > -1) nearbySector.nearbyObjects.splice(indexOf, 1);
-        }
     }
 }
 // -- Add / Remove Objects from Sectors

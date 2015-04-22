@@ -21,7 +21,7 @@ describe('Quadtree Tests', function () {
         quadtree.sectorCount.should.equal(1);
 
         var intersections = quadtree.check(obj2);
-        intersectoins.length.should.equal(1);
+        intersections.length.should.equal(1);
         intersections[0].object.should.equal(obj1);
 
         var obj3 = {x: -5, y: -5, radius: 1};
