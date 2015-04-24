@@ -27,8 +27,10 @@ function initialize(options) {
         this.dimension = options.parent.childDimension;
     }
 
-    this.left = options.left || 0;
-    this.top = options.top || 0;
+    this.x = options.x || 0;
+    this.y = options.y || 0;
+    this.width = this.dimension;
+    this.height = this.dimension;
     this.childDimension = this.dimension / 2;
     this.objectCount = 0;
     this.sectorCount = 0;
@@ -109,7 +111,7 @@ function orderArrayOfSectors() {
     while (i-- > 1) {
         var c1 = this[i];
         var c2 = this[i - 1];
-        if (c1.left < c2.left || c1.left == c2.left && c1.top < c2.top) {
+        if (c1.x < c2.x || c1.x == c2.x && c1.y < c2.y) {
             this.push(this.splice(i - 1, 1)[0]);
         }
     }
@@ -145,9 +147,23 @@ function getObjectCountAtSameCoordinate(coordinate) {
 
 
 // ++ Get Sector Methods
-function getObjectSector(obj) {
-    var coordinate = this.root.translate(obj);
-    return getLowestSectorAtCoordinates.call(this, coordinate.x, coordinate.y, 0, false);
+function getObjectSectors(obj) {
+    var sectors = [];
+    var sector = getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, false);
+    sectors.push(sector);
+    var sector2 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y, 0, false);
+    if(sector !== sector2) {
+        sectors.push(sector2);
+    }
+    var sector3 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y + obj.height, 0, false);
+    if(sector !== sector3 && sector2 !== sector3) {
+        sectors.push(sector3);
+    }
+    var sector4 = getLowestSectorAtCoordinates.call(this, obj.x, obj.y + obj.height, 0, false);
+    if(sector !== sector4 && sector2 !== sector4 && sector3 !== sector4) {
+        sectors.push(sector4);
+    }
+    return sectors;
 }
 function getLowestSectorAtCoordinates(x, y, dimension, createIfNotFound) {
     var sector = this;
@@ -160,18 +176,12 @@ function getLowestSectorAtCoordinates(x, y, dimension, createIfNotFound) {
         if (!createIfNotFound && treeX == null) return null;
         if (treeX == null) {
             treeX = sector.tree[left] = [];
-            sector = treeX[top] = new Quadtree({parent: sector, left: left, top: top});
+            sector = treeX[top] = new Quadtree({parent: sector, x: left, y: top});
         } else {
             var treeY = treeX[top];
             if (!createIfNotFound && treeY == null) return null;
-            sector = treeX[top] = (treeY != null ? treeY : new Quadtree({parent: sector, left: left, top: top}));
+            sector = treeX[top] = (treeY != null ? treeY : new Quadtree({parent: sector, x: left, y: top}));
         }
-
-        var countAtSameCoordinate = getObjectCountAtSameCoordinate.call(sector, {x: x, y: y});
-        if (countAtSameCoordinate < this.root.sectorObjectLimit && isSectorFull.call(sector) && sector.isChildSector) {
-            convertToParentSector.call(sector);
-        }
-
 
         if (sector.dimension == dimension) break;
     }
@@ -198,16 +208,42 @@ function add(obj) {
     var sector = getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, true);
     addObjectToSector.call(sector, obj);
     addObjectToSectorParents.call(sector, obj);
+    var sector2 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y, 0, true);
+    if(sector !== sector2) {
+        addObjectToSector.call(sector2, obj);
+        addObjectToSectorParents.call(sector2, obj);
+    }
+    var sector3 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y + obj.height, 0, true);
+    if(sector !== sector3 && sector2 !== sector3) {
+        addObjectToSector.call(sector3, obj);
+        addObjectToSectorParents.call(sector3, obj);
+    }
+    var sector4 = getLowestSectorAtCoordinates.call(this, obj.x, obj.y + obj.height, 0, true);
+    if(sector !== sector4 && sector2 !== sector4 && sector3 !== sector4) {
+        addObjectToSector.call(sector4, obj);
+        addObjectToSectorParents.call(sector4, obj);
+    }
 }
 function remove(obj) {
-    var sector = getObjectSector.call(this, obj);
-    removeObjectFromSector.call(sector, obj);
-    removeObjectFromSectorParents.call(sector, obj);
+    var sectors = getObjectSectors.call(this, obj);
+    var i = sectors.length;
+    while(i--){
+        var sector = sectors[i];
+        removeObjectFromSector.call(sector, obj);
+        removeObjectFromSectorParents.call(sector, obj);
+    }
 }
 
 function addObjectToSector(obj) {
-    this.objectCount++;
-    this.objects.push(obj);
+    var countAtSameCoordinate = getObjectCountAtSameCoordinate.call(this, obj);
+    if (countAtSameCoordinate < this.root.sectorObjectLimit && isSectorFull.call(this)) {
+        convertToParentSector.call(this);
+        var sector = getLowestSectorAtCoordinates(obj.x, obj.y, 0, true);
+        addObjectToSector.call(sector);
+    } else {
+        this.objectCount++;
+        this.objects.push(obj);
+    }
 }
 function removeObjectFromSector(obj) {
     var objectIndex = this.objects.indexOf(obj);
