@@ -32,18 +32,28 @@ function initialize(options) {
     this.width = this.dimension;
     this.height = this.dimension;
     this.childDimension = this.dimension / 2;
-    this.objectCount = 0;
     this.sectorCount = 0;
 }
-
 
 
 function update() {
 
 }
 
-function check() {
-
+function check(obj) {
+    var intersections = [];
+    var sectors = getObjectSectors.call(this, obj);
+    var i = sectors.length;
+    while (i--) {
+        var sector = sectors[i];
+        var k = sector.objects.length;
+        while (k--) {
+            var obj2 = sector.objects[k];
+            if (obj === obj2) continue;
+            if (checkBounds.call(obj, obj2)) intersections.push(obj2);
+        }
+    }
+    return intersections;
 }
 
 // ++ Sector Methods
@@ -53,6 +63,8 @@ function check() {
 function configureAsParentSector() {
     this.tree = [];
     this.children = [];
+    this.root.objectCount -= this.objectCount || 0;
+    this.objectCount = 0;
     if (this.objects) {
         var i = this.objects.length;
         while (i--) {
@@ -87,6 +99,7 @@ function configureAsChildSector() {
     this.tree = null;
     this.children = null;
     this.objects = [];
+    this.objectCount = 0;
 }
 function convertToParentSector() {
     configureAsParentSector.call(this);
@@ -152,15 +165,15 @@ function getObjectSectors(obj) {
     var sector = getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, false);
     sectors.push(sector);
     var sector2 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y, 0, false);
-    if(sector !== sector2) {
+    if (sector2 !== null && sector !== sector2) {
         sectors.push(sector2);
     }
     var sector3 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y + obj.height, 0, false);
-    if(sector !== sector3 && sector2 !== sector3) {
+    if (sector3 !== null && sector !== sector3 && sector2 !== sector3) {
         sectors.push(sector3);
     }
     var sector4 = getLowestSectorAtCoordinates.call(this, obj.x, obj.y + obj.height, 0, false);
-    if(sector !== sector4 && sector2 !== sector4 && sector3 !== sector4) {
+    if (sector4 !== null && sector !== sector4 && sector2 !== sector4 && sector3 !== sector4) {
         sectors.push(sector4);
     }
     return sectors;
@@ -206,31 +219,42 @@ function getAllChildSectors() {
 // ++ Add / Remove Objects from Sectors
 function add(obj) {
     var sector = getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, true);
+    this.root.objectCount++;
     addObjectToSector.call(sector, obj);
-    addObjectToSectorParents.call(sector, obj);
+    checkForEmptyParentSector.call(sector, obj);
+
     var sector2 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y, 0, true);
-    if(sector !== sector2) {
+    if (sector !== sector2) {
         addObjectToSector.call(sector2, obj);
-        addObjectToSectorParents.call(sector2, obj);
+
+        if (sector.parent !== sector2.parent) checkForEmptyParentSector.call(sector2, obj);
     }
+
     var sector3 = getLowestSectorAtCoordinates.call(this, obj.x + obj.width, obj.y + obj.height, 0, true);
-    if(sector !== sector3 && sector2 !== sector3) {
+    if (sector !== sector3 && sector2 !== sector3) {
         addObjectToSector.call(sector3, obj);
-        addObjectToSectorParents.call(sector3, obj);
+
+        if (sector.parent !== sector3.parent
+            && sector2.parent !== sector3.parent) checkForEmptyParentSector.call(sector3, obj);
     }
+
     var sector4 = getLowestSectorAtCoordinates.call(this, obj.x, obj.y + obj.height, 0, true);
-    if(sector !== sector4 && sector2 !== sector4 && sector3 !== sector4) {
+    if (sector !== sector4 && sector2 !== sector4 && sector3 !== sector4) {
         addObjectToSector.call(sector4, obj);
-        addObjectToSectorParents.call(sector4, obj);
+
+        if (sector.parent !== sector4.parent
+            && sector2.parent !== sector4.parent
+            && sector3.parent !== sector4.parent) checkForEmptyParentSector.call(sector4, obj);
     }
 }
 function remove(obj) {
     var sectors = getObjectSectors.call(this, obj);
+    this.root.objectCount--;
     var i = sectors.length;
-    while(i--){
+    while (i--) {
         var sector = sectors[i];
         removeObjectFromSector.call(sector, obj);
-        removeObjectFromSectorParents.call(sector, obj);
+        checkForEmptyParentSector.call(sector);
     }
 }
 
@@ -238,8 +262,8 @@ function addObjectToSector(obj) {
     var countAtSameCoordinate = getObjectCountAtSameCoordinate.call(this, obj);
     if (countAtSameCoordinate < this.root.sectorObjectLimit && isSectorFull.call(this)) {
         convertToParentSector.call(this);
-        var sector = getLowestSectorAtCoordinates(obj.x, obj.y, 0, true);
-        addObjectToSector.call(sector);
+        var sector = getLowestSectorAtCoordinates.call(this, obj.x, obj.y, 0, true);
+        addObjectToSector.call(sector, obj);
     } else {
         this.objectCount++;
         this.objects.push(obj);
@@ -256,18 +280,17 @@ function removeObjectFromSector(obj) {
     }
 }
 
-function addObjectToSectorParents() {
+function checkForEmptyParentSector() {
+    if (this.objectCount > 0) return;
     var parent = this.parent;
     while (parent != null) {
-        parent.objectCount++;
-        parent = parent.parent;
-    }
-}
-function removeObjectFromSectorParents() {
-    var parent = this.parent;
-    while (parent != null) {
-        parent.objectCount--;
-        if (parent.objectCount == 0 && parent.parent != null) {
+        var childIndex = parent.children.length;
+        var objectCount = 0;
+        while (childIndex--) {
+            if (parent.children[childIndex].objectCount > 0)
+                return;
+        }
+        if (objectCount == 0 && parent.parent != null) {
             decreaseSectorCount.call(parent);
             configureAsChildSector.call(parent);
         }
@@ -277,3 +300,9 @@ function removeObjectFromSectorParents() {
 // -- Add / Remove Objects from Sectors
 
 
+function checkBounds(obj) {
+    return !(obj.x > this.x + this.width ||
+    obj.x + obj.width < this.x ||
+    obj.y > this.y + this.height ||
+    obj.y + obj.height < this.top);
+}
