@@ -22,7 +22,7 @@ describe('Quadtree Tests', function () {
 
         var intersections = quadtree.check(obj2);
         intersections.length.should.equal(1);
-        intersections[0].object.should.equal(obj1);
+        intersections[0].should.equal(obj1);
 
         var obj3 = {x: -5, y: -5, width: 1, height: 1};
         quadtree.add(obj3);
